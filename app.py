@@ -17,33 +17,23 @@ stage_colors = {
 # --------------------------
 # Widgets with color-coded labels
 # --------------------------
-cutoff_date = st.text_input(
-    f'<span style="color:{stage_colors["Lab"]}">Cut-off Date</span>', 
-    "2025-12-01", 
-    unsafe_allow_html=True
-)
-core_depth = st.number_input(
-    f'<span style="color:{stage_colors["Splitting"]}">Core Depth (ft)</span>', 
-    value=5000, step=1, unsafe_allow_html=True
-)
-shipment_gap = st.number_input(
-    f'<span style="color:{stage_colors["Shipment→Split Gap"]}">Shipment→Split Gap (days)</span>', 
-    value=2, step=1, unsafe_allow_html=True
-)
-split_to_lab_gap = st.number_input(
-    f'<span style="color:{stage_colors["Split→Lab Gap"]}">Split→Lab Gap (days)</span>', 
-    value=3, step=1, unsafe_allow_html=True
-)
+st.markdown(f'<span style="color:{stage_colors["Lab"]}">Cut-off Date</span>', unsafe_allow_html=True)
+cutoff_date = st.text_input("", "2025-12-01")
 
-# Sliders for splitting rate and lab processing time
-splitting_rate = st.slider(
-    f'<span style="color:{stage_colors["Splitting"]}">Splitting Rate (ft/day)</span>', 
-    min_value=100, max_value=200, value=150, step=1
-)
-lab_days = st.slider(
-    f'<span style="color:{stage_colors["Lab"]}">Lab Processing Time (days)</span>', 
-    min_value=30, max_value=70, value=50, step=1
-)
+st.markdown(f'<span style="color:{stage_colors["Splitting"]}">Core Depth (ft)</span>', unsafe_allow_html=True)
+core_depth = st.number_input("", value=5000, step=1)
+
+st.markdown(f'<span style="color:{stage_colors["Shipment→Split Gap"]}">Shipment→Split Gap (days)</span>', unsafe_allow_html=True)
+shipment_gap = st.number_input("", value=2, step=1)
+
+st.markdown(f'<span style="color:{stage_colors["Split→Lab Gap"]}">Split→Lab Gap (days)</span>', unsafe_allow_html=True)
+split_to_lab_gap = st.number_input("", value=3, step=1)
+
+st.markdown(f'<span style="color:{stage_colors["Splitting"]}">Splitting Rate (ft/day)</span>', unsafe_allow_html=True)
+splitting_rate = st.slider("", min_value=100, max_value=200, value=150, step=1)
+
+st.markdown(f'<span style="color:{stage_colors["Lab"]}">Lab Processing Time (days)</span>', unsafe_allow_html=True)
+lab_days = st.slider("", min_value=30, max_value=70, value=50, step=1)
 
 # --------------------------
 # Function to create Gantt data
