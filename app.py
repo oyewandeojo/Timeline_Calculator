@@ -6,7 +6,7 @@ st.title("Timeline Calculator")
 
 st.markdown(
     """
-     f"<span style='background-color:{color}; padding:5px; font-style:italic;'>
+    <span style='background-color:{color}; padding:5px; font-style:italic;'>
     Against a set cut-off date (in this case when assay results are returned and invoiced).<br>
     The core samples have to be shipped by the date specified below if all the editable variables below are met.<br>
     The shipment date is highlighted by colour (green means greater than 3 weeks from today; yellow within the next 3 weeks and red means the date has passed).
@@ -108,6 +108,7 @@ st.markdown(
     f"<span style='background-color:{color}; padding:5px; font-weight:bold'>Shipment Date: {shipment_date.strftime('%Y-%m-%d')}</span>", 
     unsafe_allow_html=True
 )
+
 
 
 
