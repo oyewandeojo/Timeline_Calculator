@@ -1,5 +1,5 @@
 ---
-title: Panel Template
+title: Timeline Calculator
 emoji: 📈
 colorFrom: gray
 colorTo: green
