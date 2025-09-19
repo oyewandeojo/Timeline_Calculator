@@ -2,8 +2,11 @@ import streamlit as st
 import plotly.figure_factory as ff
 import datetime
 
-st.title("Timeline Calculator against a Set Cut-off Date")
-
+st.title("Timeline Calculator")
+st.markdown(
+    f"<span style='background-color:{gray}; padding:5px; font-weight:bold'> 'Against a Set Cut-off Date'}</span>", 
+    unsafe_allow_html=True
+)
 # --------------------------
 # Stage colors for Gantt chart
 # --------------------------
@@ -97,3 +100,4 @@ st.markdown(
     f"<span style='background-color:{color}; padding:5px; font-weight:bold'>Shipment Date: {shipment_date.strftime('%Y-%m-%d')}</span>", 
     unsafe_allow_html=True
 )
+
