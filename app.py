@@ -2,7 +2,7 @@ import streamlit as st
 import plotly.figure_factory as ff
 import datetime
 
-st.title("Sequential Gantt Chart")
+st.title("Timeline Calculator")
 
 # --------------------------
 # Stage colors
@@ -98,4 +98,5 @@ fig = ff.create_gantt(df, index_col='Resource', show_colorbar=False, showgrid_x=
 fig.update_layout(title="Timeline for Shipment to Assay Resukts - Gantt Chart", height=500)
 
 st.plotly_chart(fig)
+
 
