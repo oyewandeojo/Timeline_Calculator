@@ -2,7 +2,7 @@ import streamlit as st
 import plotly.figure_factory as ff
 import datetime
 
-st.title("Sequential Gantt Chart")
+st.title("Timeline Calculator against a Set Cut-off Date")
 
 # --------------------------
 # Stage colors for Gantt chart
@@ -18,7 +18,7 @@ stage_colors = {
 # Individual inputs (vertical)
 # --------------------------
 cutoff_date = st.text_input("Cut-off Date", "2025-12-01")
-core_depth = st.number_input("Core Depth (ft)", value=5000, step=1)
+core_depth = st.number_input("Core Footage (ft)", value=5000, step=1)
 
 # --------------------------
 # Horizontal row for the rest
@@ -38,15 +38,15 @@ with col4:
     lab_days = st.slider("Lab Processing Time (days)", min_value=30, max_value=70, value=50, step=1)
 
 # --------------------------
-# Function to create Gantt data and calculate start date
+# Function to create Gantt data and calculate shipment date
 # --------------------------
-def create_gantt_df(shipment_gap, core_depth, split_rate, split_lab_gap, lab_days, cutoff_date_str):
+def create_gantt_df(shipment_gap, core_footage, split_rate, split_lab_gap, lab_days, cutoff_date_str):
     try:
         cutoff_date_dt = datetime.datetime.strptime(cutoff_date_str, "%Y-%m-%d")
     except:
         cutoff_date_dt = datetime.datetime.today() + datetime.timedelta(days=100)
 
-    split_days = core_depth / split_rate
+    split_days = core_footage / split_rate
     stages = [
         ("Shipment→Split Gap", shipment_gap),
         ("Splitting", split_days),
@@ -76,21 +76,24 @@ def create_gantt_df(shipment_gap, core_depth, split_rate, split_lab_gap, lab_day
 # --------------------------
 # Generate Gantt chart
 # --------------------------
-df, start_date = create_gantt_df(shipment_gap, core_depth, splitting_rate, split_to_lab_gap, lab_days, cutoff_date)
+df, shipment_date = create_gantt_df(shipment_gap, core_depth, splitting_rate, split_to_lab_gap, lab_days, cutoff_date)
 fig = ff.create_gantt(df, index_col='Resource', show_colorbar=False, showgrid_x=True, showgrid_y=True)
 fig.update_layout(title="Stepped Sequential Gantt Chart", height=400)
 
 st.plotly_chart(fig)
 
 # --------------------------
-# Highlight start date based on its proximity to today
+# Highlight shipment date based on proximity to today
 # --------------------------
 today = datetime.datetime.today()
-if start_date < today:
+if shipment_date < today:
     color = "red"
-elif today <= start_date <= today + datetime.timedelta(weeks=3):
+elif today <= shipment_date <= today + datetime.timedelta(weeks=3):
     color = "yellow"
 else:
     color = "green"
 
-st.markdown(f"<span style='background-color:{color}; padding:5px; font-weight:bold'>Start Date: {start_date.strftime('%Y-%m-%d')}</span>", unsafe_allow_html=True)
+st.markdown(
+    f"<span style='background-color:{color}; padding:5px; font-weight:bold'>Shipment Date: {shipment_date.strftime('%Y-%m-%d')}</span>", 
+    unsafe_allow_html=True
+)
