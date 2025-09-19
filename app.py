@@ -77,4 +77,7 @@ def create_gantt_df(shipment_gap, core_depth, split_rate, split_lab_gap, lab_day
 # Generate Gantt chart
 # --------------------------
 df = create_gantt_df(shipment_gap, core_depth, splitting_rate, split_to_lab_gap, lab_days, cutoff_date)
-fig = ff.create_gantt(df, ind_
+fig = ff.create_gantt(df, index_col='Resource', show_colorbar=False, showgrid_x=True, showgrid_y=True)
+fig.update_layout(title="Stepped Sequential Gantt Chart", height=400)
+
+st.plotly_chart(fig)
