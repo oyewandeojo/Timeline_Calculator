@@ -5,22 +5,49 @@ import datetime
 st.title("Sequential Gantt Chart")
 
 # --------------------------
-# Widgets
+# Stage colors
 # --------------------------
-cutoff_date = st.text_input("Cut-off Date", "2025-12-01")
-core_depth = st.number_input("Core Depth (ft)", value=5000, step=1)
-shipment_gap = st.number_input("Shipment→Split Gap (days)", value=2, step=1)
-split_to_lab_gap = st.number_input("Split→Lab Gap (days)", value=3, step=1)
+stage_colors = {
+    "Shipment→Split Gap": "lightblue",
+    "Splitting": "orange",
+    "Split→Lab Gap": "yellow",
+    "Lab": "green"
+}
+
+# --------------------------
+# Widgets with color-coded labels
+# --------------------------
+cutoff_date = st.text_input(
+    f'<span style="color:{stage_colors["Lab"]}">Cut-off Date</span>', 
+    "2025-12-01", 
+    unsafe_allow_html=True
+)
+core_depth = st.number_input(
+    f'<span style="color:{stage_colors["Splitting"]}">Core Depth (ft)</span>', 
+    value=5000, step=1, unsafe_allow_html=True
+)
+shipment_gap = st.number_input(
+    f'<span style="color:{stage_colors["Shipment→Split Gap"]}">Shipment→Split Gap (days)</span>', 
+    value=2, step=1, unsafe_allow_html=True
+)
+split_to_lab_gap = st.number_input(
+    f'<span style="color:{stage_colors["Split→Lab Gap"]}">Split→Lab Gap (days)</span>', 
+    value=3, step=1, unsafe_allow_html=True
+)
 
 # Sliders for splitting rate and lab processing time
-splitting_rate = st.slider("Splitting Rate (ft/day)", min_value=100, max_value=200, value=150, step=1)
-lab_days = st.slider("Lab Processing Time (days)", min_value=30, max_value=70, value=50, step=1)
+splitting_rate = st.slider(
+    f'<span style="color:{stage_colors["Splitting"]}">Splitting Rate (ft/day)</span>', 
+    min_value=100, max_value=200, value=150, step=1
+)
+lab_days = st.slider(
+    f'<span style="color:{stage_colors["Lab"]}">Lab Processing Time (days)</span>', 
+    min_value=30, max_value=70, value=50, step=1
+)
 
 # --------------------------
-# Functions
+# Function to create Gantt data
 # --------------------------
-stage_colors = ["lightblue", "orange", "yellow", "green"]
-
 def create_gantt_df(shipment_gap, core_depth, split_rate, split_lab_gap, lab_days, cutoff_date_str):
     try:
         cutoff_date_dt = datetime.datetime.strptime(cutoff_date_str, "%Y-%m-%d")
@@ -50,7 +77,7 @@ def create_gantt_df(shipment_gap, core_depth, split_rate, split_lab_gap, lab_day
             "Task": task,
             "Start": start.strftime("%Y-%m-%d"),
             "Finish": end.strftime("%Y-%m-%d"),
-            "Resource": stage_colors[idx]
+            "Resource": stage_colors[task]
         })
     return df
 
