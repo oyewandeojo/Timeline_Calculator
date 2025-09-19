@@ -2,7 +2,7 @@ import streamlit as st
 import plotly.figure_factory as ff
 import datetime
 
-st.title("Timeline Calculator")
+st.title("Sequential Gantt Chart")
 
 # --------------------------
 # Stage colors
@@ -15,44 +15,27 @@ stage_colors = {
 }
 
 # --------------------------
-# Inject CSS to color input boxes and sliders
-# --------------------------
-st.markdown(f"""
-<style>
-/* Number inputs */
-div[data-baseweb="input"] > input:nth-of-type(1) {{
-    background-color: {stage_colors['Shipment→Split Gap']};
-}}
-div[data-baseweb="input"] > input:nth-of-type(2) {{
-    background-color: {stage_colors['Splitting']};
-}}
-div[data-baseweb="input"] > input:nth-of-type(3) {{
-    background-color: {stage_colors['Split→Lab Gap']};
-}}
-div[data-baseweb="input"] > input:nth-of-type(4) {{
-    background-color: {stage_colors['Lab']};
-}}
-/* Sliders */
-div[data-baseweb="slider"] > div > div > div > div:nth-child(1) {{
-    background-color: {stage_colors['Splitting']};
-}}
-div[data-baseweb="slider"] > div > div > div > div:nth-child(2) {{
-    background-color: {stage_colors['Lab']};
-}}
-</style>
-""", unsafe_allow_html=True)
-
-# --------------------------
-# Widgets
+# Individual inputs (vertical)
 # --------------------------
 cutoff_date = st.text_input("Cut-off Date", "2025-12-01")
 core_depth = st.number_input("Core Depth (ft)", value=5000, step=1)
-shipment_gap = st.number_input("Shipment→Split Gap (days)", value=2, step=1)
-splitting_rate = st.slider("Splitting Rate (ft/day)", min_value=100, max_value=200, value=150, step=1)
-split_to_lab_gap = st.number_input("Split→Lab Gap (days)", value=3, step=1)
 
+# --------------------------
+# Horizontal row for the rest
+# --------------------------
+col1, col2, col3, col4 = st.columns(4)
 
-lab_days = st.slider("Lab Processing Time (days)", min_value=30, max_value=70, value=50, step=1)
+with col1:
+    shipment_gap = st.number_input("Shipment→Split Gap (days)", value=2, step=1)
+
+with col2:
+    splitting_rate = st.slider("Splitting Rate (ft/day)", min_value=100, max_value=200, value=150, step=1)
+
+with col3:
+    split_to_lab_gap = st.number_input("Split→Lab Gap (days)", value=3, step=1)
+
+with col4:
+    lab_days = st.slider("Lab Processing Time (days)", min_value=30, max_value=70, value=50, step=1)
 
 # --------------------------
 # Function to create Gantt data
@@ -94,9 +77,4 @@ def create_gantt_df(shipment_gap, core_depth, split_rate, split_lab_gap, lab_day
 # Generate Gantt chart
 # --------------------------
 df = create_gantt_df(shipment_gap, core_depth, splitting_rate, split_to_lab_gap, lab_days, cutoff_date)
-fig = ff.create_gantt(df, index_col='Resource', show_colorbar=False, showgrid_x=True, showgrid_y=True)
-fig.update_layout(title="Timeline for Shipment to Assay Resukts - Gantt Chart", height=500)
-
-st.plotly_chart(fig)
-
-
+fig = ff.create_gantt(df, ind_
