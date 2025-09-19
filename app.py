@@ -10,9 +10,11 @@ st.title("Sequential Gantt Chart")
 cutoff_date = st.text_input("Cut-off Date", "2025-12-01")
 core_depth = st.number_input("Core Depth (ft)", value=5000, step=1)
 shipment_gap = st.number_input("Shipment→Split Gap (days)", value=2, step=1)
-splitting_rate = st.number_input("Splitting Rate (ft/day)", value=150, step=1)
 split_to_lab_gap = st.number_input("Split→Lab Gap (days)", value=3, step=1)
-lab_days = st.number_input("Lab Processing Time (days)", value=50, step=1)
+
+# Sliders for splitting rate and lab processing time
+splitting_rate = st.slider("Splitting Rate (ft/day)", min_value=100, max_value=200, value=150, step=1)
+lab_days = st.slider("Lab Processing Time (days)", min_value=30, max_value=70, value=50, step=1)
 
 # --------------------------
 # Functions
@@ -53,11 +55,10 @@ def create_gantt_df(shipment_gap, core_depth, split_rate, split_lab_gap, lab_day
     return df
 
 # --------------------------
-# Create and show Gantt chart
+# Generate Gantt chart
 # --------------------------
 df = create_gantt_df(shipment_gap, core_depth, splitting_rate, split_to_lab_gap, lab_days, cutoff_date)
 fig = ff.create_gantt(df, index_col='Resource', show_colorbar=False, showgrid_x=True, showgrid_y=True)
 fig.update_layout(title="Stepped Sequential Gantt Chart", height=400)
 
 st.plotly_chart(fig)
-layout.servable()
