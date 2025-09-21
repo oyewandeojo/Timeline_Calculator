@@ -84,8 +84,11 @@ st.markdown(
 )
 
 # Inputs
-cutoff_date = st.text_input("Cut-off Date", "2025-12-01")
-core_depth = st.number_input("Core Footage (ft)", value=5000, step=1)
+col1, col2 = st.columns(2)
+with col1:
+    cutoff_date = st.text_input("Cut-off Date", "2025-12-01")
+with col2:
+    core_depth = st.number_input("Core Footage (ft)", value=5000, step=1)
 
 col1, col2, col3, col4 = st.columns(4)
 with col1:
@@ -118,5 +121,6 @@ st.markdown(
     "</div>",
     unsafe_allow_html=True
 )
+
 
 
