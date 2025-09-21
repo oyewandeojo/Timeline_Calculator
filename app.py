@@ -74,7 +74,7 @@ def update_gantt(cutoff_date, core_depth, shipment_gap, splitting_rate, split_to
 st.title("Timeline Calculator")
 
 st.markdown(
-    "<div style='background-color:lightgray; padding:8px; font-style:italic;'>"
+    "<div style='background-color:lightgray; padding:6px; font-style:italic;'>"
     "Against a set cut-off date (in this case when assay results are returned and invoiced).<br>"
     "The core samples have to be shipped by the date specified below if all the editable variables below are met.<br>"
     "The shipment date is highlighted by colour (green means greater than 3 weeks from today; "
@@ -116,11 +116,12 @@ else:
     color = "lightgreen"
 
 st.markdown(
-    f"<div style='background-color:{color}; padding:10px; text-align:center; font-size:14px;'>"
+    f"<div style='background-color:{color}; padding:6px; text-align:center; font-size:14px;'>"
     f"<b>Shipment Date: {shipment_dt.strftime('%Y-%m-%d')}</b>"
     "</div>",
     unsafe_allow_html=True
 )
+
 
 
 
