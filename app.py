@@ -80,7 +80,7 @@ st.markdown(
 st.markdown(
     "<div style='background-color:lightgray; padding:6px; font-style:italic;'>"
     "Against a set cut-off date (in this case when assay results are returned and invoiced).<br>"
-    "The core samples have to be shipped by the date specified below if all the editable variables below are met.<br>"
+    "The core samples have to be shipped by the date specified below if all the editable variables below are met for it to be expensed by current year's budget.<br>"
     "The shipment date is highlighted by colour (green means greater than 3 weeks from today; "
     "yellow within the next 3 weeks and red means the date has passed)."
     "</div>",
@@ -125,6 +125,7 @@ st.markdown(
     "</div>",
     unsafe_allow_html=True
 )
+
 
 
 
