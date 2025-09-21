@@ -73,7 +73,7 @@ def update_gantt(cutoff_date, core_depth, shipment_gap, splitting_rate, split_to
 # --------------------------
 # st.title("Timeline Calculator"; 'font-size:18px')
 st.markdown(
-    "<h3 style='text-align: center; font-style:italic; font-size:24px;'>Timeline Calculator</h3>",
+    "<h2 style='text-align: center; font-style:bold; font-size:24px;'>Timeline Calculator</h3>",
     unsafe_allow_html=True
 )
 
@@ -125,6 +125,7 @@ st.markdown(
     "</div>",
     unsafe_allow_html=True
 )
+
 
 
 
