@@ -53,7 +53,7 @@ def create_gantt_df(shipment_gap, core_depth, split_rate, split_lab_gap, lab_day
             "Task": task,
             "Start": start.strftime("%Y-%m-%d"),
             "Finish": end.strftime("%Y-%m-%d"),
-            "Resource": stage_colors[stages]
+            "Resource": stage_colors[task]
         })
         end = start - datetime.timedelta(days=1)
 
@@ -118,4 +118,5 @@ st.markdown(
     "</div>",
     unsafe_allow_html=True
 )
+
 
