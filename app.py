@@ -53,7 +53,7 @@ def create_gantt_df(shipment_gap, core_depth, split_rate, split_lab_gap, lab_day
             "Task": task,
             "Start": start.strftime("%Y-%m-%d"),
             "Finish": end.strftime("%Y-%m-%d"),
-            "Resource": stage_colors[task]
+            "Resource": stage_colors[stages]
         })
         end = start - datetime.timedelta(days=1)
 
@@ -65,13 +65,13 @@ def create_gantt_df(shipment_gap, core_depth, split_rate, split_lab_gap, lab_day
 def update_gantt(cutoff_date, core_depth, shipment_gap, splitting_rate, split_to_lab_gap, lab_days):
     df = create_gantt_df(shipment_gap, core_depth, splitting_rate, split_to_lab_gap, lab_days, cutoff_date)
     fig = ff.create_gantt(df, index_col='Resource', show_colorbar=False, showgrid_x=True, showgrid_y=True)
-    fig.update_layout(title="Stepped Sequential Gantt Chart", height=400)
+    fig.update_layout(title="Gantt Chart", height=300)
     return fig, df[0]["Start"]
 
 # --------------------------
 # Streamlit Layout
 # --------------------------
-st.title("Timeline Calculator against a Set Cut-off Date")
+st.title("Timeline Calculator")
 
 st.markdown(
     "<div style='background-color:lightgray; padding:10px; font-style:italic;'>"
@@ -118,3 +118,4 @@ st.markdown(
     "</div>",
     unsafe_allow_html=True
 )
+
