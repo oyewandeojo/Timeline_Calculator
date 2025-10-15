@@ -98,7 +98,7 @@ col1, col2, col3, col4 = st.columns(4)
 with col1:
     shipment_gap = st.number_input("Shipment→Split Gap (days)", value=2, step=1)
 with col2:
-    splitting_rate = st.slider("Splitting Rate (ft/day)", 50, 500, 150, step=10)
+    splitting_rate = st.slider("Splitting Rate (ft/day)", 50, 750, 150, step=5)
 with col3:
     split_to_lab_gap = st.number_input("Split→Lab Gap (days)", value=3, step=1)
 with col4:
@@ -125,6 +125,7 @@ st.markdown(
     "</div>",
     unsafe_allow_html=True
 )
+
 
 
 
