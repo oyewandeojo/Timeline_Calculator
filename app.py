@@ -68,15 +68,15 @@ def prepare_data_for_editor(df):
     return editor_df
 
 # ---------- Streamlit App ----------
-st.title("Drilling Gantt with Inline Dependency Selector")
+st.title("Drilling Gantt Chart")
 
-# Global drilling rate input
+# Drilling rate input
 drill_rate = st.number_input(
-    "Global Drilling Rate (ft/day)", 
+    "Drilling Rate (ft/day)", 
     value=DEFAULT_DRILL_RATE, 
     min_value=0.1, 
     step=0.1,
-    help="Editable global rate used to calculate duration for all holes"
+    help="Editable drilling rate used to calculate duration for all holes"
 )
 
 # Initialize session state
@@ -93,7 +93,7 @@ st.markdown("""
 - Add/Edit rows in the table below
 - Use the **Dependency** dropdown to select which hole this one depends on
 - Start Date will automatically update to Dependency's End Date + 1 day (if same rig)
-- Duration is calculated automatically using Global Drilling Rate
+- Duration is calculated automatically using Drilling Rate
 - All updates happen automatically as you type/select
 """)
 
@@ -262,12 +262,12 @@ with st.expander("How it works"):
       1. Excludes the row's own HoleID from dependency options
       2. Checks if the dependency has the same rig
       3. If same rig, updates the Start Date to be the dependency's End Date + 1 day
-      4. Recalculates Duration based on Planned Depth and Global Drilling Rate
+      4. Recalculates Duration based on Planned Depth and Drilling Rate
       5. Updates End Date accordingly
     
     **Key Features:**
     - ✅ Dependency selector embedded directly in the input table
-    - ✅ Global drilling rate remains editable and drives all duration calculations
+    - ✅ Drilling rate remains editable and drives all duration calculations
     - ✅ **Automatic updates** - everything happens instantly as you type/select
     - ✅ Visual Gantt chart shows the complete schedule
     - ✅ Proper date handling with DateColumn for better UX
@@ -275,3 +275,4 @@ with st.expander("How it works"):
     **Note:** The dependency dropdown automatically excludes the current row's HoleID to prevent circular dependencies.
     All changes are applied automatically - no buttons needed!
     """)
+
