@@ -54,20 +54,11 @@ def compute_table_logic(df, drill_rate=DEFAULT_DRILL_RATE):
 
     return df
 
-def create_dependency_column_config():
-    """Create column config for the data editor with dependency dropdowns"""
-    return {
-        "HoleID": st.column_config.TextColumn("HoleID", required=True),
-        "Start Date": st.column_config.DateColumn("Start Date", format=DATE_FMT),
-        "End Date": st.column_config.DateColumn("End Date", format=DATE_FMT),
-        "Planned Depth": st.column_config.NumberColumn("Planned Depth", min_value=0.0, step=0.1),
-        "Rigs": st.column_config.TextColumn("Rigs"),
-        "Current Depth": st.column_config.NumberColumn("Current Depth", min_value=0.0, step=0.1),
-        "Dependency": st.column_config.SelectboxColumn(
-            "Dependency",
-            help="Select dependency - will auto-update start date"
-        )
-    }
+def get_dependency_options(df, current_hole_id):
+    """Get dependency options excluding the current row's HoleID"""
+    if df.empty or current_hole_id is None:
+        return []
+    return [h for h in df["HoleID"].dropna().unique() if h != current_hole_id]
 
 # ---------- Streamlit App ----------
 st.title("Drilling Gantt with Inline Dependency Selector")
@@ -92,13 +83,6 @@ if "df" not in st.session_state:
 if "prev_df_hash" not in st.session_state:
     st.session_state.prev_df_hash = None
 
-# Create dependency options for each row
-def get_dependency_options(df, current_hole_id):
-    """Get dependency options excluding the current row's HoleID"""
-    if df.empty or current_hole_id is None:
-        return []
-    return [h for h in df["HoleID"].dropna().unique() if h != current_hole_id]
-
 # Enhanced data editor with dependency dropdowns
 st.subheader("Drilling Schedule Table")
 st.markdown("""
@@ -112,48 +96,62 @@ st.markdown("""
 # Prepare data for editing
 edit_df = st.session_state.df.copy()
 
-# Create dependency options for the column config
-if not edit_df.empty:
-    # Create a mapping of HoleID to available dependencies for each row
-    dependency_options = {}
-    for hole_id in edit_df["HoleID"]:
-        dependency_options[hole_id] = get_dependency_options(edit_df, hole_id)
+# Create dynamic column configuration
+def create_dynamic_column_config(df):
+    """Create column config with dynamic dependency options"""
+    base_config = {
+        "HoleID": st.column_config.TextColumn("HoleID", required=True),
+        "Start Date": st.column_config.DateColumn("Start Date", format=DATE_FMT),
+        "End Date": st.column_config.DateColumn("End Date", format=DATE_FMT),
+        "Planned Depth": st.column_config.NumberColumn("Planned Depth", min_value=0.0, step=0.1),
+        "Rigs": st.column_config.TextColumn("Rigs"),
+        "Current Depth": st.column_config.NumberColumn("Current Depth", min_value=0.0, step=0.1),
+    }
     
-    # Update column config with dynamic options
-    col_config = create_dependency_column_config()
-    col_config["Dependency"].options = [""] + sorted(set(
-        option for options in dependency_options.values() for option in options
-    ))
+    # Add dependency column with options if we have data
+    if not df.empty:
+        # Get all unique HoleIDs for dependency options
+        all_hole_ids = df["HoleID"].dropna().unique().tolist()
+        base_config["Dependency"] = st.column_config.SelectboxColumn(
+            "Dependency",
+            options=[""] + all_hole_ids,
+            help="Select dependency - will auto-update start date"
+        )
+    else:
+        base_config["Dependency"] = st.column_config.SelectboxColumn(
+            "Dependency",
+            options=[],
+            help="Select dependency - will auto-update start date"
+        )
+    
+    return base_config
 
-    # Edit the dataframe
-    edited_df = st.data_editor(
-        edit_df,
-        column_config=col_config,
-        num_rows="dynamic",
-        key="drilling_editor",
-        use_container_width=True
-    )
+# Edit the dataframe
+col_config = create_dynamic_column_config(edit_df)
+edited_df = st.data_editor(
+    edit_df,
+    column_config=col_config,
+    num_rows="dynamic",
+    key="drilling_editor",
+    use_container_width=True
+)
+
+# Check if we need to recalculate
+if not edited_df.empty:
+    current_hash = hash(str(edited_df[["HoleID", "Dependency", "Planned Depth", "Rigs"]].to_dict()))
     
-    # Check if dependencies changed and trigger recalculation
-    current_hash = hash(str(edited_df[["HoleID", "Dependency", "Planned Depth"]].to_dict()))
-    
-    if st.session_state.prev_df_hash != current_hash:
+    # Recalculate if data changed or drilling rate changed
+    if (st.session_state.prev_df_hash != current_hash or 
+        "last_drill_rate" not in st.session_state or 
+        st.session_state.last_drill_rate != drill_rate):
+        
         st.session_state.prev_df_hash = current_hash
-        # Force recalculation
+        st.session_state.last_drill_rate = drill_rate
+        
         with st.spinner("Recalculating schedule..."):
             st.session_state.df = compute_table_logic(edited_df, drill_rate=drill_rate)
             st.rerun()
-    else:
-        # Normal recalculation
-        st.session_state.df = compute_table_logic(edited_df, drill_rate=drill_rate)
 else:
-    # Empty state
-    edited_df = st.data_editor(
-        st.session_state.df,
-        column_config=create_dependency_column_config(),
-        num_rows="dynamic",
-        key="drilling_editor"
-    )
     st.session_state.df = edited_df
 
 # Display computed results
@@ -173,11 +171,16 @@ if not st.session_state.df.empty:
     
     # Display the computed table
     display_df = st.session_state.df.copy()
+    
+    # Format the display dataframe
+    formatted_display_df = display_df.copy()
+    if "Duration" in formatted_display_df.columns:
+        formatted_display_df["Duration"] = formatted_display_df["Duration"].round(1)
+    if "Progress" in formatted_display_df.columns:
+        formatted_display_df["Progress"] = formatted_display_df["Progress"].round(1)
+    
     st.dataframe(
-        display_df.style.format({
-            "Duration": "{:.1f}",
-            "Progress": "{:.1f}%"
-        }),
+        formatted_display_df,
         use_container_width=True
     )
 
@@ -190,6 +193,8 @@ if not st.session_state.df.empty:
         chart_df["Start"] = pd.to_datetime(chart_df["Start Date"])
         chart_df["End"] = pd.to_datetime(chart_df["End Date"])
         chart_df["HoleID"] = chart_df["HoleID"].astype(str)
+        
+        # Create tooltip
         chart_df["Tooltip"] = (
             "Hole: " + chart_df["HoleID"] + 
             "\nStart: " + chart_df["Start Date"] +
@@ -241,4 +246,6 @@ with st.expander("How it works"):
     - Global drilling rate remains editable and drives all duration calculations
     - Automatic date recalculation when dependencies change
     - Visual Gantt chart shows the complete schedule
+    
+    **Note:** The dependency dropdown automatically excludes the current row's HoleID to prevent circular dependencies.
     """)
