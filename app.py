@@ -4,17 +4,17 @@ import numpy as np
 from datetime import datetime, timedelta
 import altair as alt
 
-# ---------- Helpers ----------
+# ---------- Constants ----------
 DATE_FMT = "%Y-%m-%d"
 DEFAULT_DRILL_RATE = 10.0
 
+# ---------- Helpers ----------
 def compute_table_logic(df, drill_rate=DEFAULT_DRILL_RATE):
     df = df.copy()
-    df["Planned Depth"] = pd.to_numeric(df["Planned Depth"], errors="coerce")
+    df["Planned Depth"] = pd.to_numeric(df.get("Planned Depth",0), errors="coerce")
     df["Current Depth"] = pd.to_numeric(df.get("Current Depth",0), errors="coerce").fillna(0.0)
     df["Duration"] = (df["Planned Depth"] / drill_rate).round(2)
 
-    # Initialize parsed dates
     df["Start_parsed"] = pd.to_datetime(df["Start Date"], errors="coerce")
     df["End_parsed"] = pd.to_datetime(df["End Date"], errors="coerce")
 
@@ -54,8 +54,8 @@ def compute_table_logic(df, drill_rate=DEFAULT_DRILL_RATE):
 
     return df
 
-# ---------- Streamlit Layout ----------
-st.title("Drilling Gantt with Dependencies")
+# ---------- Streamlit App ----------
+st.title("Drilling Gantt with Dependency Selector")
 
 # Drilling rate input
 drill_rate = st.number_input("Drilling rate (ft/day)", value=DEFAULT_DRILL_RATE, min_value=0.1, step=0.1)
@@ -65,14 +65,15 @@ if "df" not in st.session_state:
     st.session_state.df = pd.DataFrame(columns=["HoleID","Start Date","End Date",
                                                 "Planned Depth","Rigs","Current Depth","Dependency"])
 
+# Table editor
 edited_df = st.data_editor(st.session_state.df, num_rows="dynamic")
 
-# Dependency selector for selected row
-selected_idx = st.number_input("Select row index to assign Dependency", min_value=0,
-                               max_value=len(edited_df)-1 if not edited_df.empty else 0, value=0, step=1)
-
+# Row selection for dependency assignment
 if not edited_df.empty:
+    selected_idx = st.number_input("Select row index to assign Dependency", 
+                                   min_value=0, max_value=len(edited_df)-1, value=0, step=1)
     current_hole = edited_df.at[selected_idx, "HoleID"]
+    # Exclude the row’s own HoleID
     options = [h for h in edited_df["HoleID"] if h != current_hole and h != ""]
     dep_selected = st.selectbox(f"Dependency for {current_hole}", options, index=0 if options else -1)
     if dep_selected:
@@ -87,7 +88,7 @@ st.dataframe(st.session_state.df)
 # Altair Gantt chart
 if not st.session_state.df.empty:
     chart_df = st.session_state.df.copy()
-    chart_df = chart_df[pd.notnull(chart_df["Start_parsed"]) & pd.notnull(chart_df["End_parsed"])]
+    chart_df = chart_df[pd.notnull(chart_df["Start Date"]) & pd.notnull(chart_df["End Date"])]
     chart_df["Start"] = pd.to_datetime(chart_df["Start Date"])
     chart_df["End"] = pd.to_datetime(chart_df["End Date"])
     chart_df["HoleID"] = chart_df["HoleID"].astype(str)
