@@ -67,12 +67,6 @@ def prepare_data_for_editor(df):
     
     return editor_df
 
-def get_dependency_options(df, current_hole_id):
-    """Get dependency options excluding the current row's HoleID"""
-    if df.empty or current_hole_id is None:
-        return []
-    return [h for h in df["HoleID"].dropna().unique() if h != current_hole_id]
-
 # ---------- Streamlit App ----------
 st.title("Drilling Gantt with Inline Dependency Selector")
 
@@ -92,10 +86,6 @@ if "df" not in st.session_state:
         "Rigs", "Current Depth", "Dependency"
     ])
 
-# Track previous state for change detection
-if "prev_df_hash" not in st.session_state:
-    st.session_state.prev_df_hash = None
-
 # Enhanced data editor with dependency dropdowns
 st.subheader("Drilling Schedule Table")
 st.markdown("""
@@ -104,6 +94,7 @@ st.markdown("""
 - Use the **Dependency** dropdown to select which hole this one depends on
 - Start Date will automatically update to Dependency's End Date + 1 day (if same rig)
 - Duration is calculated automatically using Global Drilling Rate
+- All updates happen automatically as you type/select
 """)
 
 # Prepare data for editing - convert dates to proper format
@@ -163,20 +154,19 @@ def create_dynamic_column_config(df):
 # Edit the dataframe
 col_config = create_dynamic_column_config(edit_df)
 
-# Use a form to batch edits and reduce reruns
-with st.form("drilling_schedule_form"):
-    edited_df = st.data_editor(
-        edit_df,
-        column_config=col_config,
-        num_rows="dynamic",
-        key="drilling_editor",
-        use_container_width=True
-    )
-    
-    submitted = st.form_submit_button("Update Schedule")
+# Use a unique key for the data editor to ensure proper state management
+editor_key = f"drilling_editor_{hash(str(edit_df.to_dict()))}"
 
-# Process the edited data
-if submitted or st.session_state.get("auto_update", False):
+edited_df = st.data_editor(
+    edit_df,
+    column_config=col_config,
+    num_rows="dynamic",
+    key=editor_key,
+    use_container_width=True
+)
+
+# Always recalculate when the dataframe or drill rate changes
+if not edited_df.empty:
     # Convert dates back to strings for storage and computation
     processed_df = edited_df.copy()
     
@@ -186,29 +176,10 @@ if submitted or st.session_state.get("auto_update", False):
     if "End Date" in processed_df.columns:
         processed_df["End Date"] = processed_df["End Date"].dt.strftime(DATE_FMT)
     
-    # Check if we need to recalculate
-    if not processed_df.empty:
-        current_hash = hash(str(processed_df[["HoleID", "Dependency", "Planned Depth", "Rigs"]].to_dict()))
-        
-        # Recalculate if data changed or drilling rate changed
-        if (st.session_state.prev_df_hash != current_hash or 
-            "last_drill_rate" not in st.session_state or 
-            st.session_state.last_drill_rate != drill_rate):
-            
-            st.session_state.prev_df_hash = current_hash
-            st.session_state.last_drill_rate = drill_rate
-            
-            with st.spinner("Recalculating schedule..."):
-                st.session_state.df = compute_table_logic(processed_df, drill_rate=drill_rate)
-                st.session_state.auto_update = True
-                st.rerun()
-    else:
-        st.session_state.df = processed_df
-
-# Add manual refresh button as fallback
-if st.button("Force Recalculation"):
-    st.session_state.df = compute_table_logic(st.session_state.df, drill_rate=drill_rate)
-    st.rerun()
+    # Always recalculate - Streamlit's reactivity will handle the updates
+    st.session_state.df = compute_table_logic(processed_df, drill_rate=drill_rate)
+else:
+    st.session_state.df = edited_df
 
 # Display computed results
 if not st.session_state.df.empty:
@@ -297,10 +268,10 @@ with st.expander("How it works"):
     **Key Features:**
     - ✅ Dependency selector embedded directly in the input table
     - ✅ Global drilling rate remains editable and drives all duration calculations
-    - ✅ Automatic date recalculation when dependencies change
+    - ✅ **Automatic updates** - everything happens instantly as you type/select
     - ✅ Visual Gantt chart shows the complete schedule
     - ✅ Proper date handling with DateColumn for better UX
     
     **Note:** The dependency dropdown automatically excludes the current row's HoleID to prevent circular dependencies.
-    Use the 'Update Schedule' button to apply changes or the 'Force Recalculation' button if needed.
+    All changes are applied automatically - no buttons needed!
     """)
