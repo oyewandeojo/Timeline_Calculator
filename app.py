@@ -13,13 +13,13 @@ DEFAULT_DRILL_RATE = 10.0
 def create_template_df():
     """Create a template dataframe for download"""
     return pd.DataFrame({
-        "HoleID": ["Hole_001", "Hole_002", "Hole_003"],
-        "Start Date": ["2024-01-01", "", ""],
-        "End Date": ["2024-01-05", "", ""],
-        "Planned Depth": [100.0, 150.0, 200.0],
-        "Rigs": ["Rig_A", "Rig_A", "Rig_B"],
-        "Current Depth": [0.0, 0.0, 0.0],
-        "Dependency": ["", "Hole_001", ""]
+        "HoleID": ["Hole_001", "Hole_002", "Hole_003", "Hole_004"],
+        "Start Date": ["2024-01-01", "", "", ""],
+        "End Date": ["2024-01-05", "", "", ""],
+        "Planned Depth": [100.0, 150.0, 200.0, 120.0],
+        "Rigs": ["Rig_A", "Rig_A", "Rig_B", "Rig_B"],
+        "Current Depth": [0.0, 0.0, 0.0, 0.0],
+        "Dependency": ["", "Hole_001", "", "Hole_003"]
     })
 
 def validate_import_df(df):
@@ -67,31 +67,58 @@ def compute_table_logic(df, drill_rate=DEFAULT_DRILL_RATE):
     df["Start_parsed"] = pd.to_datetime(df["Start Date"], errors="coerce")
     df["End_parsed"] = pd.to_datetime(df["End Date"], errors="coerce")
 
-    # Resolve dependencies
-    max_passes = max(5, len(df))
-    for _ in range(max_passes):
+    # NEW: Improved dependency resolution
+    # First, ensure all dependencies that have start dates calculate their end dates
+    for idx, row in df.iterrows():
+        if pd.notnull(row["Start_parsed"]) and pd.isnull(row["End_parsed"]):
+            df.at[idx, "End_parsed"] = row["Start_parsed"] + pd.to_timedelta(np.ceil(row["Duration"]), unit='D')
+
+    # Resolve dependencies with better handling for multiple rigs and chains
+    max_passes = len(df) * 2  # Allow more passes for complex dependencies
+    for pass_num in range(max_passes):
         changed = False
+        unresolved_dependencies = 0
+        
         for idx, row in df.iterrows():
             dep = str(row.get("Dependency", "")).strip()
             if dep == "":
                 continue
+                
             dep_idx = df.index[df["HoleID"] == dep].tolist()
             if not dep_idx:
                 continue
+                
             dep_idx = dep_idx[0]
-            dep_end = df.at[dep_idx, "End_parsed"]
+            dep_row = df.loc[dep_idx]
+            dep_end = dep_row["End_parsed"]
+            
+            # Skip if dependency doesn't have an end date yet
             if pd.isna(dep_end):
+                unresolved_dependencies += 1
                 continue
-            if row["Rigs"] == df.at[dep_idx, "Rigs"]:
+                
+            # Only apply dependency if rigs match AND dependency is resolved
+            if row["Rigs"] == dep_row["Rigs"]:
                 new_start = dep_end + timedelta(days=1)
+                
+                # Apply the new start date if it's different
                 if pd.isna(df.at[idx, "Start_parsed"]) or df.at[idx, "Start_parsed"] != new_start:
                     df.at[idx, "Start_parsed"] = new_start
                     df.at[idx, "End_parsed"] = new_start + timedelta(days=int(np.ceil(row["Duration"])))
                     changed = True
+                    st.info(f"Pass {pass_num + 1}: Updated {row['HoleID']} to start after {dep}")
+        
+        # Debug info
+        if unresolved_dependencies > 0:
+            st.info(f"Pass {pass_num + 1}: {unresolved_dependencies} unresolved dependencies remaining")
+            
         if not changed:
+            st.success(f"Dependency resolution completed in {pass_num + 1} passes")
             break
+    else:
+        st.warning(f"Warning: Dependency resolution hit maximum passes ({max_passes}). Some dependencies may not be fully resolved.")
 
-    # Fill End Date if Start exists but End doesn't
+    # Final pass: ensure all rows with start dates have end dates
     for idx, row in df.iterrows():
         if pd.notnull(row["Start_parsed"]) and pd.isnull(row["End_parsed"]):
             df.at[idx, "End_parsed"] = row["Start_parsed"] + pd.to_timedelta(np.ceil(row["Duration"]), unit='D')
@@ -350,6 +377,12 @@ if not st.session_state.df.empty:
         with col4:
             holes_with_deps = st.session_state.df["Dependency"].notna().sum()
             st.metric("Holes with Dependencies", holes_with_deps)
+        
+        # Show rig groups
+        st.write("**Rig Groups:**")
+        rig_groups = st.session_state.df.groupby("Rigs")
+        for rig, group in rig_groups:
+            st.write(f"- {rig}: {len(group)} holes")
     else:
         st.info("ℹ️ Data loaded but not yet calculated. Click 'Calculate Schedule' to process dependencies and dates.")
     
@@ -410,29 +443,21 @@ else:
 # ---------- How It Works Section ----------
 with st.expander("How it works"):
     st.markdown("""
+    **Improved Dependency Resolution:**
+    - **Multiple Passes**: The algorithm runs multiple passes to resolve complex dependency chains
+    - **Cross-Rig Isolation**: Dependencies only apply within the same rig group
+    - **Sequential Processing**: Handles chains like A→B→C within the same rig
+    - **Debug Info**: Shows progress and any unresolved dependencies
+    
     **Calculation Process:**
     1. **Input Data**: Enter data manually or import CSV
     2. **Set Dependencies**: Use dropdowns to define which holes depend on others
-    3. **Calculate**: Click "Calculate Schedule" to process all dependencies
-    4. **View Results**: See updated dates, durations, and Gantt chart
+    3. **Calculate**: Click "Calculate Schedule" to process all dependencies across all rig groups
+    4. **View Results**: See updated dates, durations, and Gantt chart for ALL rigs
     
     **Dependency Logic:**
-    - When you calculate the schedule, the system:
-      1. Excludes the row's own HoleID from dependency options
-      2. Checks if the dependency has the same rig
-      3. If same rig, updates the Start Date to be the dependency's End Date + 1 day
-      4. Recalculates Duration based on Planned Depth and Global Drilling Rate
-      5. Updates End Date accordingly
-    
-    **Import/Export Features:**
-    - 📤 **Download Template**: Get a properly formatted CSV template
-    - 📥 **Import Data**: Upload your own CSV data
-    - 📤 **Export Data**: Download your current schedule as CSV
-    
-    **Key Features:**
-    - ✅ Dependency selector embedded directly in the input table
-    - ✅ Global drilling rate drives all duration calculations
-    - ✅ Manual calculation control for better predictability
-    - ✅ CSV import/export for easy data management
-    - ✅ Visual Gantt chart shows the complete schedule
+    - When you calculate the schedule, the system processes EACH rig group independently
+    - Within each rig group, dependencies are resolved in sequence
+    - The algorithm ensures all dependency chains are properly calculated
+    - Multiple rigs can have independent dependency chains
     """)
