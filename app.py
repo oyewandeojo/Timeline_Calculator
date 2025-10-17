@@ -3,12 +3,60 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import altair as alt
+import io
 
 # ---------- Constants ----------
 DATE_FMT = "%Y-%m-%d"
 DEFAULT_DRILL_RATE = 10.0
 
-# ---------- Helpers ----------
+# ---------- Template & Import Helpers ----------
+def create_template_df():
+    """Create a template dataframe for download"""
+    return pd.DataFrame({
+        "HoleID": ["Hole_001", "Hole_002", "Hole_003"],
+        "Start Date": ["2024-01-01", "", ""],
+        "End Date": ["2024-01-05", "", ""],
+        "Planned Depth": [100.0, 150.0, 200.0],
+        "Rigs": ["Rig_A", "Rig_A", "Rig_B"],
+        "Current Depth": [0.0, 0.0, 0.0],
+        "Dependency": ["", "Hole_001", ""]
+    })
+
+def validate_import_df(df):
+    """Validate imported dataframe has required columns"""
+    required_columns = ["HoleID", "Start Date", "End Date", "Planned Depth", "Rigs", "Current Depth", "Dependency"]
+    
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        return False, f"Missing required columns: {', '.join(missing_columns)}"
+    
+    # Check for duplicate HoleIDs
+    if df["HoleID"].duplicated().any():
+        return False, "Duplicate HoleIDs found in the data"
+    
+    return True, "Valid data"
+
+def process_imported_df(df):
+    """Process imported dataframe to ensure proper data types"""
+    processed_df = df.copy()
+    
+    # Ensure all required columns exist
+    required_columns = ["HoleID", "Start Date", "End Date", "Planned Depth", "Rigs", "Current Depth", "Dependency"]
+    for col in required_columns:
+        if col not in processed_df.columns:
+            processed_df[col] = ""
+    
+    # Convert numeric columns
+    processed_df["Planned Depth"] = pd.to_numeric(processed_df["Planned Depth"], errors="coerce").fillna(0)
+    processed_df["Current Depth"] = pd.to_numeric(processed_df["Current Depth"], errors="coerce").fillna(0)
+    
+    # Fill empty strings for optional columns
+    processed_df["Dependency"] = processed_df["Dependency"].fillna("")
+    processed_df["Rigs"] = processed_df["Rigs"].fillna("")
+    
+    return processed_df
+
+# ---------- Computation Helpers ----------
 def compute_table_logic(df, drill_rate=DEFAULT_DRILL_RATE):
     df = df.copy()
     df["Planned Depth"] = pd.to_numeric(df.get("Planned Depth", 0), errors="coerce")
@@ -68,16 +116,7 @@ def prepare_data_for_editor(df):
     return editor_df
 
 # ---------- Streamlit App ----------
-st.title("Drilling Gantt Chart")
-
-# Drilling rate input
-drill_rate = st.number_input(
-    "Drilling Rate (ft/day)", 
-    value=DEFAULT_DRILL_RATE, 
-    min_value=0.1, 
-    step=0.1,
-    help="Editable drilling rate used to calculate duration for all holes"
-)
+st.title("Drilling Gantt with Inline Dependency Selector")
 
 # Initialize session state
 if "df" not in st.session_state:
@@ -86,19 +125,94 @@ if "df" not in st.session_state:
         "Rigs", "Current Depth", "Dependency"
     ])
 
-# Enhanced data editor with dependency dropdowns
+# ---------- Import/Export Section ----------
+st.subheader("Import & Export Data")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.markdown("**Import Data**")
+    uploaded_file = st.file_uploader(
+        "Upload CSV file", 
+        type=["csv"],
+        help="Upload a CSV file with drilling data. Download the template below to ensure proper format."
+    )
+    
+    if uploaded_file is not None:
+        try:
+            imported_df = pd.read_csv(uploaded_file)
+            is_valid, message = validate_import_df(imported_df)
+            
+            if is_valid:
+                processed_df = process_imported_df(imported_df)
+                st.session_state.df = processed_df
+                st.success(f"✅ Data imported successfully! Loaded {len(processed_df)} holes.")
+            else:
+                st.error(f"❌ Import failed: {message}")
+                
+        except Exception as e:
+            st.error(f"❌ Error reading file: {str(e)}")
+
+with col2:
+    st.markdown("**Export Data**")
+    
+    # Download template
+    template_df = create_template_df()
+    csv_template = template_df.to_csv(index=False)
+    st.download_button(
+        label="📥 Download Template",
+        data=csv_template,
+        file_name="drilling_schedule_template.csv",
+        mime="text/csv",
+        help="Download a template CSV file to ensure proper formatting"
+    )
+    
+    # Download current data
+    if not st.session_state.df.empty:
+        csv_data = st.session_state.df.to_csv(index=False)
+        st.download_button(
+            label="📥 Export Current Data",
+            data=csv_data,
+            file_name=f"drilling_schedule_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+            mime="text/csv",
+            help="Download current drilling schedule as CSV"
+        )
+    else:
+        st.download_button(
+            label="📥 Export Current Data",
+            data="",
+            file_name="empty_drilling_schedule.csv",
+            mime="text/csv",
+            disabled=True,
+            help="No data available to export"
+        )
+
+# ---------- Global Drilling Rate ----------
+st.subheader("Global Parameters")
+drill_rate = st.number_input(
+    "Global Drilling Rate (ft/day)", 
+    value=DEFAULT_DRILL_RATE, 
+    min_value=0.1, 
+    step=0.1,
+    help="Editable global rate used to calculate duration for all holes"
+)
+
+# ---------- Data Editor Section ----------
 st.subheader("Drilling Schedule Table")
 st.markdown("""
 **Instructions:**
-- Add/Edit rows in the table below
+- Add/Edit rows in the table below or import data from CSV
 - Use the **Dependency** dropdown to select which hole this one depends on
 - Start Date will automatically update to Dependency's End Date + 1 day (if same rig)
-- Duration is calculated automatically using Drilling Rate
+- Duration is calculated automatically using Global Drilling Rate
 - All updates happen automatically as you type/select
 """)
 
 # Prepare data for editing - convert dates to proper format
-edit_df = prepare_data_for_editor(st.session_state.df)
+if not st.session_state.df.empty:
+    edit_df = prepare_data_for_editor(st.session_state.df)
+else:
+    edit_df = st.session_state.df.copy()
 
 # Create dynamic column configuration
 def create_dynamic_column_config(df):
@@ -152,21 +266,18 @@ def create_dynamic_column_config(df):
     return base_config
 
 # Edit the dataframe
-col_config = create_dynamic_column_config(edit_df)
+if not edit_df.empty:
+    col_config = create_dynamic_column_config(edit_df)
+    
+    edited_df = st.data_editor(
+        edit_df,
+        column_config=col_config,
+        num_rows="dynamic",
+        key="drilling_editor",
+        use_container_width=True
+    )
 
-# Use a unique key for the data editor to ensure proper state management
-editor_key = f"drilling_editor_{hash(str(edit_df.to_dict()))}"
-
-edited_df = st.data_editor(
-    edit_df,
-    column_config=col_config,
-    num_rows="dynamic",
-    key=editor_key,
-    use_container_width=True
-)
-
-# Always recalculate when the dataframe or drill rate changes
-if not edited_df.empty:
+    # Always recalculate when the dataframe or drill rate changes
     # Convert dates back to strings for storage and computation
     processed_df = edited_df.copy()
     
@@ -179,9 +290,16 @@ if not edited_df.empty:
     # Always recalculate - Streamlit's reactivity will handle the updates
     st.session_state.df = compute_table_logic(processed_df, drill_rate=drill_rate)
 else:
+    # Handle empty dataframe
+    edited_df = st.data_editor(
+        st.session_state.df,
+        num_rows="dynamic",
+        key="drilling_editor_empty",
+        use_container_width=True
+    )
     st.session_state.df = edited_df
 
-# Display computed results
+# ---------- Results Display ----------
 if not st.session_state.df.empty:
     st.subheader("Computed Schedule")
     
@@ -252,9 +370,9 @@ if not st.session_state.df.empty:
     else:
         st.info("No valid date data available for Gantt chart. Please add Start/End dates.")
 else:
-    st.info("Add drilling data to the table above to get started.")
+    st.info("Add drilling data to the table above or import a CSV file to get started.")
 
-# Add some explanation
+# ---------- How It Works Section ----------
 with st.expander("How it works"):
     st.markdown("""
     **Automatic Dependency Logic:**
@@ -262,17 +380,30 @@ with st.expander("How it works"):
       1. Excludes the row's own HoleID from dependency options
       2. Checks if the dependency has the same rig
       3. If same rig, updates the Start Date to be the dependency's End Date + 1 day
-      4. Recalculates Duration based on Planned Depth and Drilling Rate
+      4. Recalculates Duration based on Planned Depth and Global Drilling Rate
       5. Updates End Date accordingly
+    
+    **Import/Export Features:**
+    - 📤 **Download Template**: Get a properly formatted CSV template
+    - 📥 **Import Data**: Upload your own CSV data (must match template format)
+    - 📤 **Export Data**: Download your current schedule as CSV
+    
+    **Required CSV Columns:**
+    - `HoleID`: Unique identifier for each hole (text)
+    - `Start Date`: Start date (YYYY-MM-DD format)
+    - `End Date`: End date (YYYY-MM-DD format)  
+    - `Planned Depth`: Total planned depth in feet (number)
+    - `Rigs`: Rig name (text)
+    - `Current Depth`: Current depth achieved (number)
+    - `Dependency`: HoleID this hole depends on (text, leave empty if none)
     
     **Key Features:**
     - ✅ Dependency selector embedded directly in the input table
-    - ✅ Drilling rate remains editable and drives all duration calculations
+    - ✅ Global drilling rate remains editable and drives all duration calculations
     - ✅ **Automatic updates** - everything happens instantly as you type/select
+    - ✅ CSV import/export for easy data management
     - ✅ Visual Gantt chart shows the complete schedule
-    - ✅ Proper date handling with DateColumn for better UX
     
     **Note:** The dependency dropdown automatically excludes the current row's HoleID to prevent circular dependencies.
     All changes are applied automatically - no buttons needed!
     """)
-
