@@ -125,6 +125,20 @@ if "df" not in st.session_state:
         "Rigs", "Current Depth", "Dependency"
     ])
 
+# Track if we need to recalculate after import
+if "recalculate_after_import" not in st.session_state:
+    st.session_state.recalculate_after_import = False
+
+# ---------- Global Drilling Rate ----------
+st.subheader("Global Parameters")
+drill_rate = st.number_input(
+    "Global Drilling Rate (ft/day)", 
+    value=DEFAULT_DRILL_RATE, 
+    min_value=0.1, 
+    step=0.1,
+    help="Editable global rate used to calculate duration for all holes"
+)
+
 # ---------- Import/Export Section ----------
 st.subheader("Import & Export Data")
 
@@ -146,7 +160,9 @@ with col1:
             if is_valid:
                 processed_df = process_imported_df(imported_df)
                 st.session_state.df = processed_df
+                st.session_state.recalculate_after_import = True
                 st.success(f"✅ Data imported successfully! Loaded {len(processed_df)} holes.")
+                st.rerun()  # Force rerun to trigger recalculation
             else:
                 st.error(f"❌ Import failed: {message}")
                 
@@ -186,16 +202,6 @@ with col2:
             disabled=True,
             help="No data available to export"
         )
-
-# ---------- Global Drilling Rate ----------
-st.subheader("Global Parameters")
-drill_rate = st.number_input(
-    "Global Drilling Rate (ft/day)", 
-    value=DEFAULT_DRILL_RATE, 
-    min_value=0.1, 
-    step=0.1,
-    help="Editable global rate used to calculate duration for all holes"
-)
 
 # ---------- Data Editor Section ----------
 st.subheader("Drilling Schedule Table")
@@ -264,6 +270,13 @@ def create_dynamic_column_config(df):
         )
     
     return base_config
+
+# Handle import recalculation
+if st.session_state.recalculate_after_import and not st.session_state.df.empty:
+    with st.spinner("Calculating imported data..."):
+        st.session_state.df = compute_table_logic(st.session_state.df, drill_rate=drill_rate)
+    st.session_state.recalculate_after_import = False
+    st.rerun()
 
 # Edit the dataframe
 if not edit_df.empty:
