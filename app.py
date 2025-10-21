@@ -162,6 +162,205 @@ st.subheader("Import & Export Data")
 
 col1, col2 = st.columns(2)
 
+import streamlit as st
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+import altair as alt
+import io
+
+# ---------- Constants ----------
+DATE_FMT = "%Y-%m-%d"
+DEFAULT_DRILL_RATE = 10.0
+
+# ---------- Template & Import Helpers ----------
+def create_template_df():
+    """Create a template dataframe for download"""
+    return pd.DataFrame({
+        "HoleID": ["Hole_001", "Hole_002", "Hole_003", "Hole_004"],
+        "Start Date": ["2024-01-01", "", "", ""],
+        "End Date": ["2024-01-05", "", "", ""],
+        "Planned Depth": [100.0, 150.0, 200.0, 120.0],
+        "Rigs": ["Rig_A", "Rig_A", "Rig_B", "Rig_B"],
+        "Current Depth": [0.0, 0.0, 0.0, 0.0],
+        "Dependency": ["", "Hole_001", "", "Hole_003"]
+    })
+
+def validate_import_df(df):
+    """Validate imported dataframe has required columns"""
+    required_columns = ["HoleID", "Start Date", "End Date", "Planned Depth", "Rigs", "Current Depth", "Dependency"]
+    
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        return False, f"Missing required columns: {', '.join(missing_columns)}"
+    
+    # Check for duplicate HoleIDs
+    if df["HoleID"].duplicated().any():
+        return False, "Duplicate HoleIDs found in the data"
+    
+    return True, "Valid data"
+
+def process_imported_df(df):
+    """Process imported dataframe to ensure proper data types"""
+    processed_df = df.copy()
+    
+    # Ensure all required columns exist
+    required_columns = ["HoleID", "Start Date", "End Date", "Planned Depth", "Rigs", "Current Depth", "Dependency"]
+    for col in required_columns:
+        if col not in processed_df.columns:
+            processed_df[col] = ""
+    
+    # Convert numeric columns
+    processed_df["Planned Depth"] = pd.to_numeric(processed_df["Planned Depth"], errors="coerce").fillna(0)
+    processed_df["Current Depth"] = pd.to_numeric(processed_df["Current Depth"], errors="coerce").fillna(0)
+    
+    # Fill empty strings for optional columns
+    processed_df["Dependency"] = processed_df["Dependency"].fillna("")
+    processed_df["Rigs"] = processed_df["Rigs"].fillna("")
+    
+    return processed_df
+
+# ---------- Computation Helpers ----------
+def add_days(start_date, days_to_add, business_days_only):
+    """Add days to a date, considering business days if specified"""
+    if business_days_only:
+        # For business days, we need to calculate considering weekends
+        current_date = start_date
+        days_added = 0
+        
+        while days_added < days_to_add:
+            current_date += timedelta(days=1)
+            # Check if it's a weekday (Monday=0, Sunday=6)
+            if current_date.weekday() < 5:  # 0-4 are weekdays
+                days_added += 1
+                
+        return current_date
+    else:
+        # For 7-day weeks, simply add the days
+        return start_date + timedelta(days=days_to_add)
+
+def compute_table_logic(df, drill_rate=DEFAULT_DRILL_RATE, business_days_only=False):
+    df = df.copy()
+    df["Planned Depth"] = pd.to_numeric(df.get("Planned Depth", 0), errors="coerce")
+    df["Current Depth"] = pd.to_numeric(df.get("Current Depth", 0), errors="coerce").fillna(0.0)
+    df["Duration"] = (df["Planned Depth"] / drill_rate).round(2)
+
+    # Parse dates, handling both string and date objects
+    df["Start_parsed"] = pd.to_datetime(df["Start Date"], errors="coerce")
+    df["End_parsed"] = pd.to_datetime(df["End Date"], errors="coerce")
+
+    # First, ensure all dependencies that have start dates calculate their end dates
+    for idx, row in df.iterrows():
+        if pd.notnull(row["Start_parsed"]) and pd.isnull(row["End_parsed"]):
+            duration_days = int(np.ceil(row["Duration"]))
+            df.at[idx, "End_parsed"] = add_days(row["Start_parsed"], duration_days, business_days_only)
+
+    # Resolve dependencies with better handling for multiple rigs and chains
+    max_passes = len(df) * 2  # Allow more passes for complex dependencies
+    for pass_num in range(max_passes):
+        changed = False
+        
+        for idx, row in df.iterrows():
+            dep = str(row.get("Dependency", "")).strip()
+            if dep == "":
+                continue
+                
+            dep_idx = df.index[df["HoleID"] == dep].tolist()
+            if not dep_idx:
+                continue
+                
+            dep_idx = dep_idx[0]
+            dep_row = df.loc[dep_idx]
+            dep_end = dep_row["End_parsed"]
+            
+            # Skip if dependency doesn't have an end date yet
+            if pd.isna(dep_end):
+                continue
+                
+            # Only apply dependency if rigs match AND dependency is resolved
+            if row["Rigs"] == dep_row["Rigs"]:
+                # Add 1 day (considering business days if specified)
+                new_start = add_days(dep_end, 1, business_days_only)
+                
+                # Apply the new start date if it's different
+                if pd.isna(df.at[idx, "Start_parsed"]) or df.at[idx, "Start_parsed"] != new_start:
+                    df.at[idx, "Start_parsed"] = new_start
+                    duration_days = int(np.ceil(row["Duration"]))
+                    df.at[idx, "End_parsed"] = add_days(new_start, duration_days, business_days_only)
+                    changed = True
+        
+        if not changed:
+            break
+
+    # Final pass: ensure all rows with start dates have end dates
+    for idx, row in df.iterrows():
+        if pd.notnull(row["Start_parsed"]) and pd.isnull(row["End_parsed"]):
+            duration_days = int(np.ceil(row["Duration"]))
+            df.at[idx, "End_parsed"] = add_days(row["Start_parsed"], duration_days, business_days_only)
+
+    # Format for display - keep as strings for data editor compatibility
+    df["Start Date"] = df["Start_parsed"].dt.strftime(DATE_FMT)
+    df["End Date"] = df["End_parsed"].dt.strftime(DATE_FMT)
+    df["Progress"] = (df["Current Depth"] / df["Planned Depth"] * 100).round(2).fillna(0)
+
+    return df
+
+def prepare_data_for_editor(df):
+    """Prepare dataframe for data editor - ensure proper data types"""
+    editor_df = df.copy()
+    
+    # Convert date columns to datetime objects for editing, but handle NaNs
+    if "Start Date" in editor_df.columns:
+        editor_df["Start Date"] = pd.to_datetime(editor_df["Start Date"], errors="coerce")
+    if "End Date" in editor_df.columns:
+        editor_df["End Date"] = pd.to_datetime(editor_df["End Date"], errors="coerce")
+    
+    return editor_df
+
+# ---------- Streamlit App ----------
+st.title("Drilling Gantt with Inline Dependency Selector")
+
+# Initialize session state
+if "df" not in st.session_state:
+    st.session_state.df = pd.DataFrame(columns=[
+        "HoleID", "Start Date", "End Date", "Planned Depth", 
+        "Rigs", "Current Depth", "Dependency"
+    ])
+
+# Track the current state to detect changes
+if "current_data_hash" not in st.session_state:
+    st.session_state.current_data_hash = None
+if "current_drill_rate" not in st.session_state:
+    st.session_state.current_drill_rate = DEFAULT_DRILL_RATE
+if "current_business_days" not in st.session_state:
+    st.session_state.current_business_days = False
+
+# ---------- Global Parameters ----------
+st.subheader("Global Parameters")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    drill_rate = st.number_input(
+        "Global Drilling Rate (ft/day)", 
+        value=DEFAULT_DRILL_RATE, 
+        min_value=0.1, 
+        step=0.1,
+        help="Editable global rate used to calculate duration for all holes"
+    )
+
+with col2:
+    business_days_only = st.checkbox(
+        "Business Days Only (Mon-Fri)",
+        value=False,
+        help="When checked, calculations consider only business days (Monday-Friday). When unchecked, uses 7-day weeks."
+    )
+
+# ---------- Import/Export Section ----------
+st.subheader("Import & Export Data")
+
+col1, col2 = st.columns(2)
+
 with col1:
     st.markdown("**Import Data**")
     uploaded_file = st.file_uploader(
@@ -217,9 +416,10 @@ st.markdown("""
 - Add/Edit rows in the table below or import data from CSV
 - Use the **Dependency** dropdown to select which hole this one depends on
 - All calculations happen automatically when you make changes
-- Start Date updates to Dependency's End Date + 1 day (if same rig)
+- Start Date updates to Dependency's End Date + 1 day (considering business days setting)
 - Duration is calculated automatically using Global Drilling Rate
-""")
+- **Calendar Mode:** {}
+""".format("Business Days (Mon-Fri)" if business_days_only else "7 Days/Week"))
 
 # Prepare data for editing - convert dates to proper format
 if not st.session_state.df.empty:
@@ -298,17 +498,19 @@ if not edit_df.empty:
         processed_df["End Date"] = processed_df["End Date"].dt.strftime(DATE_FMT)
     
     # Calculate hash of current data to detect changes
-    current_hash = hash(str(processed_df.to_dict()) + str(drill_rate))
+    current_hash = hash(str(processed_df.to_dict()) + str(drill_rate) + str(business_days_only))
     
-    # Recalculate if data or drill rate has changed
+    # Recalculate if data, drill rate, or business days setting has changed
     if (st.session_state.current_data_hash != current_hash or 
-        st.session_state.current_drill_rate != drill_rate):
+        st.session_state.current_drill_rate != drill_rate or
+        st.session_state.current_business_days != business_days_only):
         
         with st.spinner("Updating schedule..."):
-            st.session_state.df = compute_table_logic(processed_df, drill_rate=drill_rate)
+            st.session_state.df = compute_table_logic(processed_df, drill_rate=drill_rate, business_days_only=business_days_only)
         
         st.session_state.current_data_hash = current_hash
         st.session_state.current_drill_rate = drill_rate
+        st.session_state.current_business_days = business_days_only
 else:
     # Handle empty dataframe
     edited_df = st.data_editor(
@@ -331,6 +533,10 @@ if st.button("🗑️ Clear All Data"):
 # ---------- Results Display ----------
 if not st.session_state.df.empty:
     st.subheader("Computed Schedule")
+    
+    # Show calendar mode
+    calendar_mode = "📅 Business Days (Mon-Fri)" if business_days_only else "📅 7 Days/Week"
+    st.write(f"**Calendar Mode:** {calendar_mode}")
     
     # Show summary statistics
     col1, col2, col3, col4 = st.columns(4)
@@ -370,7 +576,8 @@ if not st.session_state.df.empty:
             "\nEnd: " + chart_df["End Date"] +
             "\nDuration: " + chart_df["Duration"].round(1).astype(str) + " days" +
             "\nRig: " + chart_df["Rigs"].fillna("Not set") +
-            "\nDependency: " + chart_df["Dependency"].fillna("None")
+            "\nDependency: " + chart_df["Dependency"].fillna("None") +
+            "\nCalendar: " + ("Business Days" if business_days_only else "7 Days/Week")
         )
 
         gantt = alt.Chart(chart_df).mark_bar(
@@ -386,7 +593,7 @@ if not st.session_state.df.empty:
             tooltip=["Tooltip:N"]
         ).properties(
             height=400,
-            title="Drilling Schedule Gantt Chart"
+            title=f"Drilling Schedule Gantt Chart ({'Business Days' if business_days_only else '7 Days/Week'})"
         ).configure_axis(
             grid=True
         ).configure_view(
@@ -402,20 +609,24 @@ else:
 # ---------- How It Works Section ----------
 with st.expander("How it works"):
     st.markdown("""
+    **Calendar Modes:**
+    - **7 Days/Week**: All days count equally (default)
+    - **Business Days Only**: Only Monday-Friday count; weekends are skipped
+    
     **Automatic Calculations:**
     - All calculations happen automatically when you make changes
     - Change a dependency, planned depth, or drilling rate → instant updates
-    - Import data → automatically calculated
-    - Edit any field → automatically recalculated
+    - Switch between calendar modes → all dates recalculate automatically
     
     **Dependency Logic:**
     - Dependencies only apply within the same rig group
-    - Start Date updates to Dependency's End Date + 1 day
+    - Start Date updates to Dependency's End Date + 1 day (considering calendar mode)
     - Duration calculated from Planned Depth / Global Drilling Rate
     - Complex dependency chains are resolved automatically
     
     **Features:**
     - ✅ Real-time automatic calculations
+    - ✅ Choice between 7-day weeks and business days
     - ✅ CSV import/export
     - ✅ Multi-rig dependency handling
     - ✅ Visual Gantt chart
