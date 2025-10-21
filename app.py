@@ -690,13 +690,13 @@ if not st.session_state.df.empty:
         gantt = alt.Chart(chart_df).mark_bar(
             cornerRadius=3,
             opacity=0.7
-        ).encode(
+        ).encode()
 import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import altair as alt
-import io)
+import io
 
 # ---------- Constants ----------
 DATE_FMT = "%Y-%m-%d"
@@ -1167,5 +1167,6 @@ with st.expander("How it works", key="how_it_works_expander"):
     - ✅ Visual Gantt chart
     - ✅ Dependency dropdowns exclude current row's HoleID
     """)
+
 
 
