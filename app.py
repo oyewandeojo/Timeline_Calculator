@@ -262,7 +262,7 @@ def compute_table_logic(df, drill_rate=DEFAULT_DRILL_RATE, business_days_only=Fa
         
         for idx, row in df.iterrows():
             dep = str(row.get("Dependency", "")).strip()
-            if dep == "":
+        if dep == "":
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -739,3 +739,4 @@ with st.expander("How it works", key="how_it_works_expander"):
     - ✅ Visual Gantt chart
     - ✅ Dependency dropdowns exclude current row's HoleID
     """)
+
