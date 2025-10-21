@@ -263,6 +263,107 @@ def compute_table_logic(df, drill_rate=DEFAULT_DRILL_RATE, business_days_only=Fa
         for idx, row in df.iterrows():
             dep = str(row.get("Dependency", "")).strip()
             if dep == "":
+import streamlit as st
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+import altair as alt
+import io
+
+# ---------- Constants ----------
+DATE_FMT = "%Y-%m-%d"
+DEFAULT_DRILL_RATE = 10.0
+
+# ---------- Template & Import Helpers ----------
+def create_template_df():
+    """Create a template dataframe for download"""
+    return pd.DataFrame({
+        "HoleID": ["Hole_001", "Hole_002", "Hole_003", "Hole_004"],
+        "Start Date": ["2024-01-01", "", "", ""],
+        "End Date": ["2024-01-05", "", "", ""],
+        "Planned Depth": [100.0, 150.0, 200.0, 120.0],
+        "Rigs": ["Rig_A", "Rig_A", "Rig_B", "Rig_B"],
+        "Current Depth": [0.0, 0.0, 0.0, 0.0],
+        "Dependency": ["", "Hole_001", "", "Hole_003"]
+    })
+
+def validate_import_df(df):
+    """Validate imported dataframe has required columns"""
+    required_columns = ["HoleID", "Start Date", "End Date", "Planned Depth", "Rigs", "Current Depth", "Dependency"]
+    
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        return False, f"Missing required columns: {', '.join(missing_columns)}"
+    
+    # Check for duplicate HoleIDs
+    if df["HoleID"].duplicated().any():
+        return False, "Duplicate HoleIDs found in the data"
+    
+    return True, "Valid data"
+
+def process_imported_df(df):
+    """Process imported dataframe to ensure proper data types"""
+    processed_df = df.copy()
+    
+    # Ensure all required columns exist
+    required_columns = ["HoleID", "Start Date", "End Date", "Planned Depth", "Rigs", "Current Depth", "Dependency"]
+    for col in required_columns:
+        if col not in processed_df.columns:
+            processed_df[col] = ""
+    
+    # Convert numeric columns
+    processed_df["Planned Depth"] = pd.to_numeric(processed_df["Planned Depth"], errors="coerce").fillna(0)
+    processed_df["Current Depth"] = pd.to_numeric(processed_df["Current Depth"], errors="coerce").fillna(0)
+    
+    # Fill empty strings for optional columns
+    processed_df["Dependency"] = processed_df["Dependency"].fillna("")
+    processed_df["Rigs"] = processed_df["Rigs"].fillna("")
+    
+    return processed_df
+
+# ---------- Computation Helpers ----------
+def add_days(start_date, days_to_add, business_days_only):
+    """Add days to a date, considering business days if specified"""
+    if business_days_only:
+        # For business days, we need to calculate considering weekends
+        current_date = start_date
+        days_added = 0
+        
+        while days_added < days_to_add:
+            current_date += timedelta(days=1)
+            # Check if it's a weekday (Monday=0, Sunday=6)
+            if current_date.weekday() < 5:  # 0-4 are weekdays
+                days_added += 1
+                
+        return current_date
+    else:
+        # For 7-day weeks, simply add the days
+        return start_date + timedelta(days=days_to_add)
+
+def compute_table_logic(df, drill_rate=DEFAULT_DRILL_RATE, business_days_only=False):
+    df = df.copy()
+    df["Planned Depth"] = pd.to_numeric(df.get("Planned Depth", 0), errors="coerce")
+    df["Current Depth"] = pd.to_numeric(df.get("Current Depth", 0), errors="coerce").fillna(0.0)
+    df["Duration"] = (df["Planned Depth"] / drill_rate).round(2)
+
+    # Parse dates, handling both string and date objects
+    df["Start_parsed"] = pd.to_datetime(df["Start Date"], errors="coerce")
+    df["End_parsed"] = pd.to_datetime(df["End Date"], errors="coerce")
+
+    # First, ensure all dependencies that have start dates calculate their end dates
+    for idx, row in df.iterrows():
+        if pd.notnull(row["Start_parsed"]) and pd.isnull(row["End_parsed"]):
+            duration_days = int(np.ceil(row["Duration"]))
+            df.at[idx, "End_parsed"] = add_days(row["Start_parsed"], duration_days, business_days_only)
+
+    # Resolve dependencies with better handling for multiple rigs and chains
+    max_passes = len(df) * 2  # Allow more passes for complex dependencies
+    for pass_num in range(max_passes):
+        changed = False
+        
+        for idx, row in df.iterrows():
+            dep = str(row.get("Dependency", "")).strip()
+            if dep == "":
                 continue
                 
             dep_idx = df.index[df["HoleID"] == dep].tolist()
@@ -346,6 +447,7 @@ with col1:
         value=DEFAULT_DRILL_RATE, 
         min_value=0.1, 
         step=0.1,
+        key="drill_rate_input",  # Added unique key
         help="Editable global rate used to calculate duration for all holes"
     )
 
@@ -353,6 +455,7 @@ with col2:
     business_days_only = st.checkbox(
         "Business Days Only (Mon-Fri)",
         value=False,
+        key="business_days_checkbox",  # Added unique key
         help="When checked, calculations consider only business days (Monday-Friday). When unchecked, uses 7-day weeks."
     )
 
@@ -366,6 +469,7 @@ with col1:
     uploaded_file = st.file_uploader(
         "Upload CSV file", 
         type=["csv"],
+        key="csv_uploader",  # Added unique key
         help="Upload a CSV file with drilling data. Download the template below to ensure proper format."
     )
     
@@ -395,6 +499,7 @@ with col2:
         data=csv_template,
         file_name="drilling_schedule_template.csv",
         mime="text/csv",
+        key="template_download",  # Added unique key
         help="Download a template CSV file to ensure proper formatting"
     )
     
@@ -406,6 +511,7 @@ with col2:
             data=csv_data,
             file_name=f"drilling_schedule_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
             mime="text/csv",
+            key="data_export",  # Added unique key
             help="Download current drilling schedule as CSV"
         )
 
@@ -416,7 +522,7 @@ st.markdown("""
 - Add/Edit rows in the table below or import data from CSV
 - Use the **Dependency** dropdown to select which hole this one depends on
 - All calculations happen automatically when you make changes
-- Start Date updates to Dependency's End Date + 1 day (considering business days setting)
+- Start Date updates to Dependency's End Date + 1 day (considering calendar mode)
 - Duration is calculated automatically using Global Drilling Rate
 - **Calendar Mode:** {}
 """.format("Business Days (Mon-Fri)" if business_days_only else "7 Days/Week"))
@@ -522,7 +628,7 @@ else:
     st.session_state.df = edited_df
 
 # Clear data button
-if st.button("🗑️ Clear All Data"):
+if st.button("🗑️ Clear All Data", key="clear_data_button"):
     st.session_state.df = pd.DataFrame(columns=[
         "HoleID", "Start Date", "End Date", "Planned Depth", 
         "Rigs", "Current Depth", "Dependency"
@@ -541,22 +647,23 @@ if not st.session_state.df.empty:
     # Show summary statistics
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Total Holes", len(st.session_state.df))
+        st.metric("Total Holes", len(st.session_state.df), key="total_holes_metric")
     with col2:
         total_duration = st.session_state.df["Duration"].sum() if "Duration" in st.session_state.df.columns else 0
-        st.metric("Total Duration (days)", f"{total_duration:.1f}")
+        st.metric("Total Duration (days)", f"{total_duration:.1f}", key="total_duration_metric")
     with col3:
         avg_progress = st.session_state.df["Progress"].mean() if "Progress" in st.session_state.df.columns else 0
-        st.metric("Average Progress", f"{avg_progress:.1f}%")
+        st.metric("Average Progress", f"{avg_progress:.1f}%", key="avg_progress_metric")
     with col4:
         holes_with_deps = st.session_state.df["Dependency"].notna().sum() if "Dependency" in st.session_state.df.columns else 0
-        st.metric("Holes with Dependencies", holes_with_deps)
+        st.metric("Holes with Dependencies", holes_with_deps, key="deps_metric")
     
     # Display the computed table
     display_df = st.session_state.df.copy()
     st.dataframe(
         display_df,
-        use_container_width=True
+        use_container_width=True,
+        key="results_dataframe"
     )
 
     # Altair Gantt chart
@@ -600,14 +707,14 @@ if not st.session_state.df.empty:
             strokeWidth=0
         )
         
-        st.altair_chart(gantt, use_container_width=True)
+        st.altair_chart(gantt, use_container_width=True, key="gantt_chart")
     else:
         st.info("No valid date data available for Gantt chart. Please add Start/End dates.")
 else:
     st.info("Add drilling data to the table above or import a CSV file to get started.")
 
 # ---------- How It Works Section ----------
-with st.expander("How it works"):
+with st.expander("How it works", key="how_it_works_expander"):
     st.markdown("""
     **Calendar Modes:**
     - **7 Days/Week**: All days count equally (default)
