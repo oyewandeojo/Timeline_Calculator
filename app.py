@@ -696,7 +696,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import altair as alt
-import io
+import io)
 
 # ---------- Constants ----------
 DATE_FMT = "%Y-%m-%d"
@@ -1167,4 +1167,5 @@ with st.expander("How it works", key="how_it_works_expander"):
     - ✅ Visual Gantt chart
     - ✅ Dependency dropdowns exclude current row's HoleID
     """)
+
 
