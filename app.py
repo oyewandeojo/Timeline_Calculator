@@ -132,7 +132,7 @@ def prepare_data_for_editor(df):
     return editor_df
 
 # ---------- Streamlit App ----------
-st.title("Drilling Gantt with Inline Dependency Selector")
+st.title("Drilling Gantt")
 
 # Initialize session state
 if "df" not in st.session_state:
@@ -150,7 +150,7 @@ if "current_drill_rate" not in st.session_state:
 # ---------- Global Drilling Rate ----------
 st.subheader("Global Parameters")
 drill_rate = st.number_input(
-    "Global Drilling Rate (ft/day)", 
+    "Drilling Rate (ft/day)", 
     value=DEFAULT_DRILL_RATE, 
     min_value=0.1, 
     step=0.1,
@@ -430,3 +430,4 @@ with st.expander("How it works"):
     - ✅ Visual Gantt chart
     - ✅ Dependency dropdowns exclude current row's HoleID
     """)
+
