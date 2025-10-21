@@ -471,8 +471,7 @@ def main():
         """)
 
 if __name__ == "__main__":
-    main()        
-    with col4:
+    main()         with col4:
             holes_with_deps = st.session_state.df["Dependency"].notna().sum() if "Dependency" in st.session_state.df.columns else 0
             st.metric("Holes with Dependencies", holes_with_deps, key="deps_metric")
         
@@ -560,5 +559,6 @@ if __name__ == "__main__":
 
 if __name__ == "__main__":
     main()
+
 
 
